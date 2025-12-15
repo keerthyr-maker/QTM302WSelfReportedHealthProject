@@ -1,5 +1,5 @@
 
-# Examining the Correlation between Socioeconomic Indicators and Self-Reported Health
+# Examining the Relationship between Socioeconomic Indicators and Self-Reported Health
 This project is a part of the Technical Writing Class at Emory University
 
 ## Project Intro/Objective
