@@ -1,0 +1,577 @@
+---
+title: "ENGRD 302W Project Code Notebook"
+author: "Jessie Chen, Keerthy Rangan, Claire Hamilton, Sally Choi"
+date: "2025-10-02"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+health_data <- read.csv("nhis_00004.csv", header = TRUE)
+```
+
+### Introduction/Motivation
+
+Our dataset comes from the IPUMS National Health Interview Survey (NHIS), which captures individual-level survey data on self-reported health, healthcare access, and health behaviors in the U.S. Our group has a strong interest in public health and healthcare access, and the IPUMS NHIS dataset allowed us to select the specific health areas we wanted to focus on. While the NHIS includes dozens of variables, we were particularly interested in exploring the relationship between socioeconomic factors and self-reported health in the U.S. While the NHIS includes data from 1963 to present, we wanted to focus on recent trends, so we looked at the years 2022 to 2024.
+
+The U.S. spends significantly more on healthcare than any other developed nation, yet its health outcomes lag behind. Thus, we wanted to examine how socioeconomic and access-related factors influence self-reported health. Our dependent variable is self-reported health (HEALTH), and our explanatory variables are access to health care (USUALPL), health insurance coverage status (HINOTCOVE), private vs. public insurance coverage (HIPRIVATEE), educational attainment (EDUC), and hours worked per week (HOURSWRK).
+
+### Outline
+1. About the NHIS Dataset
+2. Inspecting & Cleaning the Dataset
+3. Visualizing the Variables
+4. Testing for Significance
+5. Analysis
+6. Conclusion & Discussion
+
+### About the Dataset
+
+This dataset from the IPUMS National Health Interview Survey (NHIS) contains 113,318 observations with 9 variables, including self-reported health outcomes and key socioeconomic and healthcare access variables.
+
+Our dependent variable, self-reported health (HEALTH), provides a subjective measure of overall well-being on a 5-point scale from Poor to Excellent. Explanatory variables capture socioeconomic and healthcare access factors, which research suggests are strongly linked to health outcomes. For instance, educational attainment (EDUC) may affect health literacy, while hours worked (HOURSWRK) reflects both economic stability and time available for health-promoting behaviors. Health insurance coverage (HINOTCOVE and HIPRIVATEE) and having a usual place for medical care (USUALPL) indicate access to healthcare services, which can influence both preventive care utilization and management of chronic health conditions.
+
+We are interested in exploring how the explanatory variables, individually and jointly, influence people’s perceived health. Descriptions and coding of each variable are listed below:
+
+
+- YEAR: survey year
+
+- NHISPID: NHIS unique identifier per responder
+
+- HHX: household number (from NHIS)
+
+- HEALTH: individual’s self-reported health on a 5-point Likert scale; 1 = Excellent, 2 = Very Good, 3 = Good, 4 = Fair, 5 = Poor
+
+- USUALPL: indicates whether the individual has a place they usually go for medical care; 1 = No, 2 = Yes, 3 = There is more than one place
+
+- HINOTCOVE: indicates whether the individual currently lacks health insurance coverage; 1 = No (has coverage), 2 = Yes (has no coverage)
+
+- HIPRIVATEE: indicates whether the person currently has private health insurance coverage; 1 = No, 2 = Yes (information available),  3 = Yes (no information available)
+
+- EDUC: indicates the highest level of schooling an individual has completed, ranging from 102 = Never Attended to 522 = Doctoral Degree
+
+- HOURSWRK: total hours each person worked in the past week
+
+### Set-up
+
+```{r}
+library(car)
+library(tidyverse)
+library(broom)
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+```
+
+Car and tidyverse are R packages that contain functions which enhance what R can do. The car package enables regression and modeling while the tidyverse and ggplot2 package allows for data cleaning and visualizations. The rest of the packages are implemented to add features to our tables, ehancing the visual appeal. As these packages are already installed in the respective RStudio, the library function calls the packages to be utilized in this markdown file. 
+
+
+### Inspecting and Cleaning the Data Set
+
+Oftentimes, datasets do not come in pristine conditions. Data sets must be inspected and cleaned for certain analyses. Respondents to this survey could have reported values that are unrelated to our purpose, which need to be filtered out. Variables and their category names could be named poorly. Variable distributions should be inspected to satisfy future testing assumptions. In other words, the examples listed are a few reasons as to why data cleaning and inspecting are paramount to effective analysis. The primary ways of cleaning data consist of setting observations to NA or regrouping/ renaming levels. The code chunks below demonstrate the cleaning process for our dataset for the purposes of investigating the relation of socioeconomic factors to self-reported health. 
+
+#### HEALTH Variable (Response Variable)
+```{r}
+#inspect health variable (response variable)
+table(health_data$HEALTH)
+```
+
+As stated in our introduction, the HEALTH variable is our response variable. Looking at the first table, there are 9 levels in this categorical variable. According to our data description, levels 7 and 9 are unknown. As a result, we are recoding this variable and exchanging the unknowns for NAs. 
+
+```{r}
+#recode HEALTH variable into two levels
+health_data$self_report_health_i<- factor(NA, levels = c("poor to fair health", "good to excellent health"))
+health_data$self_report_health_i[health_data$HEALTH == 1 | health_data$HEALTH == 2 | health_data$HEALTH == 3] <- "good to excellent health"
+health_data$self_report_health_i[health_data$HEALTH == 4 | health_data$HEALTH == 5] <- "poor to fair health"
+table(health_data$self_report_health_i)
+```
+
+Subsequently, we are regrouping levels 1-5 into two categories - poor to fair health and good to excellent health. The number of categories are condensed to two because i) it would simplify the nature of the response variable ii) it would allow for binary logistic regression and iii) we are mainly concerned about the factors that significantly influence respondents to report poor to fair health versus good to excellent health. Why are we choosing logistic regression you make ask? Logistic regression is utilized when the response variable is binary or categorical, and the recoded self_report_health variable meet this criteria.
+
+```{r}
+#we will be conducting a logistic regression model on the data after cleaning and basic visualizations
+#0 = poor to fair health
+#1 = good to excellent health
+health_data$self_report_health<- factor(NA, levels = c("0", "1"))
+health_data$self_report_health[health_data$HEALTH == 1 | health_data$HEALTH == 2 | health_data$HEALTH == 3] <- "1"
+health_data$self_report_health[health_data$HEALTH == 4| health_data$HEALTH == 5] <- "0"
+table(health_data$self_report_health)
+```
+
+As binary values take the form of 0 to 1, we set the poor to fair health category as 0 and the good to excellent health category as 1. Our recoded variable is renamed as self_report_health. The new name is not only more readable but also speaks to what the variable entails. We are printing the last table to check the recoding and ensure that nothing too significant has gone wrong. 
+
+
+#### USUALPL Variable (Explanatory Variable I)
+```{r}
+#inspect USUALPL (explanatory variable 1)
+table(health_data$USUALPL)
+```
+
+The first explanatory variable to inspect is USUALPL. Similar to the previous variable, the first table demonstrates the original levels of this categorical variable.
+
+```{r}
+#recode USUALPL with readable categories
+health_data$medical_care <- factor(NA, levels = c("no place", "at least one place"))
+health_data$medical_care[health_data$USUALPL == 1] <- "no place"
+health_data$medical_care[health_data$USUALPL == 2 | health_data$USUALPL == 3] <- "at least one place"
+#check recoding
+table(health_data$medical_care)
+```
+
+As levels 7-9 are an indication of unknown responses, we are recooding to attribute those levels to NA. Levels 1-3 are also not indicative of what each level means; as a result, we are renaming the levels with more descriptive words so the audience can have a better gauge as to what the different levels mean in this categorical variable. To further enhance the readability of the code, we are renaming the overall name of this categorical variable to medical_care.
+
+#### HINOTCOVE Variable (Explanatory Variable II)
+```{r}
+#inspect HINOTCOVE (explanatory variable 2)
+table(health_data$HINOTCOVE)
+```
+
+HINOTCOVE is the second categorical explanatory variable. The first table highlights the original levels - level 9 meaning unknown. 
+
+```{r}
+#recode HINOTCOVE with readable categories
+health_data$insurance <- factor(NA, levels = c("has coverage", "has no coverage"))
+health_data$insurance[health_data$HINOTCOVE == 1] <- "has coverage"
+health_data$insurance[health_data$HINOTCOVE == 2] <- "has no coverage"
+#check recoding
+table(health_data$insurance)
+```
+
+As a result, we are recoding to set level 9 observations to NA and rename the levels with more descriptive language. For instance, "has coverage" is more indicative than blatantly the number 1. The name HINOTCOVE is also not very telling of the nature of this variable; thus, we are renaming this variable to insurance to inform the audience that this categorical variable indicates whether the audience is covered by insurance of not. We are printing the last table to demonstrate sucessful recoding. 
+
+#### HIPRIVATEE Variable (Explanatory Variable III)
+```{r}
+#inspect HIPRIVATEE (explanatory variable 3)
+table(health_data$HIPRIVATEE)
+#recode HIPRIVATEE with readable categories
+health_data$priv_insurance <- factor(NA, levels = c("no", "yes"))
+health_data$priv_insurance[health_data$HIPRIVATEE == 1] <- "no"
+health_data$priv_insurance[health_data$HIPRIVATEE == 2 | health_data$HIPRIVATEE == 3] <- "yes"
+#check recoding
+table(health_data$priv_insurance)
+```
+
+HIPRIVATEE is the third categorical explanatory variable. Following the same recoding process as above, we are eliminating levels 7 and 9 because these observations are unknown. We are also renaming the numbered levels and overall variable name to appeal to the general audience and enhance the transparency between the us and our audience. 
+
+#### EDUC Variable (Explanatory Variable IV)
+```{r}
+#inpsect EDUC (explanatory variable 4)
+table(health_data$EDUC)
+```
+
+EDUC is the fourth categorical explanatory variable. This categorical variable originally contains a good deal of numbered levels. 997 and 999 are the unknowns and 0s are NIU. Each three digit number is indicative of an education level. 
+
+```{r}
+#recode EDUC with readable categories
+health_data$edulevel <- factor(NA, levels = c("did not graduate highschool", "did graduate highschool"))
+health_data$edulevel[health_data$EDUC == 103 | health_data$EDUC == 116 | health_data$EDUC == 202] <- "did not graduate highschool"
+health_data$edulevel[health_data$EDUC == 201 | health_data$EDUC == 301 | health_data$EDUC == 302 | health_data$EDUC == 303 | health_data$EDUC == 400 | health_data$EDUC == 510 | health_data$EDUC == 520] <- "did graduate highschool"
+table(health_data$edulevel)
+```
+
+We are recoding this variable to set unknown observations to NA, rename the levels with the actual education level, and rename the entire variable itself with more descriptive terms. Edulevel is more telling than just EDUC. Similar to the previous variables above, we are printing the last table to double check our recoding. 
+
+#### HOURSWRK Variable (Explanatory Variable V)
+```{r}
+#place HOURSWRK values into a new variable
+health_data$hoursworked <- health_data$HOURSWRK
+#clean out the 0s because 0s correspond to NIU
+health_data$hoursworked[health_data$HOURSWRK == 0] <- NA
+```
+
+HOURSWRK is the last explanatory variable and it is numerical. We are renaming the overall variable name to keep the consistency with the lower case categorical variable names. The 0 values do not indicate 0 hours worked but rather NIU. As a result, we are recoding these observations to NA. 
+
+```{r}
+#obtain summary stats
+summary(health_data$hoursworked)
+```
+
+Furthermore, we are obtaining summary statistics for the recoded variable. We can see that the mean and median are relatively close, demonstrating that this variable is likely normally distributed. It shows that the number of NAs is 63,626 observations, which is a considerable amount to influence the mean and median had this numerical variable not been recoded.
+
+#### Final Cleaning
+```{r}
+#remove all the NA rows for all the variables to remain consistent
+health_data_new <- health_data[!is.na(health_data$self_report_health), ]
+health_data_new1 <- health_data_new[!is.na(health_data_new$insurance), ]
+health_data_new2 <- health_data_new1[!is.na(health_data_new1$priv_insurance), ]
+health_data_new3 <- health_data_new2[!is.na(health_data_new2$hoursworked), ]
+health_data_new4 <- health_data_new3[!is.na(health_data_new3$medical_care), ]
+health_data_new5 <- health_data_new4[!is.na(health_data_new4$edulevel), ]
+dim(health_data_new5) #49306 observations
+#half of the observations were removed
+```
+
+So far, the five explanatory variables along with the response variable are recoded and cleaned. However, because the NAs appear here and there, the lengths of each variable are not consistent, which can pose problems in future analyses with regression or graphing. As a final cleaning, we are deleting the entire rows where NAs are present in any variable. We are naming the fully cleaned dataset health_data_new5, which contains 49,306 observations. Although half of the observations are removed, the remaining observations are ready for further analyses. 
+
+### Visualizing the Variables
+
+After cleaning the dataset, it is equally important to visualize the variables for distributions and how they compare with other variables for clearer comparisons of trends. Barplots and pie charts can be used for categorical variables, and histograms and boxplots can be used for numerical variables. In order to obtain insight into our independent variables and visualize their trends with our response variable (self_reported_health), we are creating several bar graphs and pie charts to model the variables individually as well as the explanatory variables with self_reported_health. We are also modeling the numeric variable as a histogram and examining its relationship with self_reported_health.
+
+#### Distribution of Self-Reported Health 
+```{r}
+#get proportions of self_report_health variable
+self_report_health_prop <- prop.table(table(health_data_new5$self_report_health_i))
+self_report_health_prop_df <- as.data.frame(self_report_health_prop)
+colnames(self_report_health_prop_df) <- c("Categories", "Proportions")
+```
+
+It is important to calculate the proportions when visualizing data in R as proportions provide context beyond raw data, which can help the audience acknowledge the relative importance of each category in a bigger context.
+
+```{r}
+#plot self_report_health variable
+ggplot(self_report_health_prop_df,aes(x = 2, y = Proportions, fill = Categories)) +
+  geom_col(width = 1,color = NA,alpha = 0.35,position = position_stack(),aes(x = 2.08)) +
+  geom_col(width = 0.7,color = "white",linewidth = 0.6,show.legend = TRUE) +
+    scale_fill_manual(values = c("steelblue", "grey")) +
+  coord_polar(theta = "y") +
+  xlim(0.6, 2.6) +
+  geom_text(aes(label = paste0(round(Proportions * 100, 1), "%")),position = position_stack(vjust = 0.5),color = "white",size = 5,fontface = "bold") +
+  theme_void() +
+  labs(title = "Self-Reported Health Distribution",fill = "Health Category") +
+  theme(plot.title = element_text(size = 14,face = "bold",hjust = 0),legend.title = element_text(face = "bold"))
+```
+
+In order to examine how people perceive their own health, we are creating a pie chart to see what percentage of subjects have poor to fair health and what percentage have good to excellent health. The chart shows that almost 92% of individuals report being in good to excellent health, represented by the large light-gray segment that dominates the circle, while only about 8% report poor to fair health, shown by the much smaller blue segment. The strong contrast in proportion size visually strengthens the imbalance between the two groups and highlights that the vast majority of respondents perceive their health positively.
+
+#### Distribution of Medical Care Access
+```{r}
+#get proportions of medical_care variable
+medical_care_prop <- prop.table(table(health_data_new5$medical_care))
+medical_care_df <- as.data.frame(medical_care_prop)
+colnames(medical_care_df) <- c("Categories", "Proportions")
+```
+
+Proportions are obtained here similarly to better visualize the different categories in the medical_care variable.
+
+```{r}
+#plot medical_care variable
+ggplot(medical_care_df,aes(x = Categories, y = Proportions, fill = Categories)) +
+  geom_bar(stat = "identity",aes(y = Proportions * 0.98),fill = "black",alpha = 0.25,width = 0.75) +
+geom_bar(stat = "identity",width = 0.7,color = "white",linewidth = 0.6) +
+geom_text(aes(label = paste0(round(Proportions * 100, 1), "%")),vjust = -0.4,color = "white",size = 5,fontface = "bold") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),expand = expansion(mult = c(0, 0.15))) +
+    scale_fill_manual(values = c("steelblue", "grey")) +
+  labs(title = "Medical Care Distribution",x = "Medical Care Type",y = "Proportion",fill = "Medical Care Types") +
+  theme_minimal(base_size = 14) +
+theme(plot.title = element_text(size = 14,face = "bold",hjust = 0),axis.title = element_text(face = "bold"),legend.title = element_text(face = "bold"),panel.grid.major.x = element_blank(),panel.grid.minor = element_blank())
+```
+
+We are graphing the proportion of respondents by their type of medical care access to visualize the distribution of access healthcare services in our dataset. We are using a bar chart, where the x-axis represents medical care categories and the height of each bar indicates the proportion of respondents in that category. The bar for individuals with at least one place for medical care rises to roughly 80% of the y-axis, while the bar representing those with no regular place is substantially shorter. This clear difference in bar height visually emphasizes that most respondents report having a consistent source of medical care, suggesting generally stable access to healthcare services within the dataset.
+
+#### Self-Reported Health by Medical Care Access
+```{r}
+#get proportions of each medical_care category with each self_report_health category
+prop_df <- health_data_new5 %>%
+  group_by(medical_care, self_report_health_i) %>%  # count each combination
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(medical_care) %>%                        # calculate proportion within medical_care
+  mutate(proportion = count / sum(count))
+```
+
+This is a little more tricky with two proportions. We are curious to determine the proportion of individuals that have poor to fair health or good to excellent health within each category in the medical_care variable.
+
+```{r}
+#visualizing self_report_health and medical_care
+ggplot(prop_df, aes(x = medical_care, y = proportion, fill = self_report_health_i)) +
+  geom_bar(stat = "identity",aes(y = proportion * 0.98),fill = "black",alpha = 0.25,width = 0.75) +
+  geom_bar(stat = "identity",width = 0.7,color = "white",linewidth = 0.6) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),expand = expansion(mult = c(0, 0.15))) +
+    scale_fill_manual(values = c("steelblue", "grey")) +
+  labs(title = "Proportion of Self-Reported Health by Medical Care",x = "Medical Care",y = "Proportion",fill = "Self-Reported Health") +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(size = 14,face = "bold",hjust = 0),axis.title = element_text(face = "bold"),axis.text.x = element_text(angle = 45, hjust = 1),legend.title = element_text(face = "bold"),panel.grid.major.x = element_blank(),panel.grid.minor = element_blank())
+```
+
+To explore how access to care is related to self-perceived health outcomes, are using a stacked barplot where each bar represents a medical care access group scaled to 100%, and the colored segments within each bar show the proportion of respondents in each health category. Across both groups, the gray segments representing good to excellent health make up the majority of each bar, indicating high levels of positive self-reported health regardless of care access. While differences across groups are relatively small, the bar corresponding to individuals with no regular place for medical care shows a slightly larger gray segment, indicating a marginally higher proportion reporting good to excellent health compared to those with at least one regular place of care.
+
+#### Distribution of Insurance Coverage Status
+```{r}
+#get proportions of insurance variable
+insurance_prop <- prop.table(table(health_data_new5$insurance))
+insurance_df <- as.data.frame(insurance_prop)
+colnames(insurance_df) <- c("Categories", "Proportions")
+```
+
+We can see here that we are obtaining the proportions of each category in the insurance variable. 
+
+```{r}
+#plot insurance variable
+ggplot(insurance_df, aes(x = 2, y = Proportions, fill = Categories)) +
+  geom_col(width = 1,color = NA,alpha = 0.35,position = position_stack(),aes(x = 2.08)) +
+  geom_col(width = 0.7,color = "white",linewidth = 0.6,show.legend = TRUE) +
+    scale_fill_manual(values = c("steelblue", "grey")) +
+  coord_polar(theta = "y") +
+  xlim(0.6, 2.6) +
+  geom_text(aes(label = paste0(round(Proportions * 100, 1), "%")),position = position_stack(vjust = 0.5),color = "white",size = 5,fontface = "bold") +
+  labs(title = "Insurance Coverage Distribution",fill = "Insurance Coverage") +
+  theme_void(base_size = 14) +
+  theme(plot.title = element_text(size = 14,face = "bold",hjust = 0),legend.title = element_text(face = "bold"),legend.text = element_text(size = 12))
+```
+
+To understand what proportion of people in our dataset have insurance coverage, we are plotting a pie chart in which each segment’s area represents the share of respondents in that category. The chart shows that over 90% of individuals have insurance coverage, represented by the large blue segment occupying most of the circle, while around 10% do not, shown by the much smaller gray segment. The dominance of the coverage segment visually underscores that insurance is common in this sample and provides important context for examining health differences by coverage status.
+
+#### Self-Reported Health by Insurance Coverage Status
+```{r}
+#get proportions of each insurance category with each self_report_health category
+prop_df2 <- health_data_new5 %>%
+  group_by(insurance, self_report_health_i) %>%  # count each combination
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(insurance) %>%                        # calculate proportion within medical_care
+  mutate(proportion = count / sum(count))
+```
+
+Two way proportions are being calculated between the insurance and self_report_health variable. Specifically, we are curious to see the proportion of individuals that have poor to fair health or good to excellent health within each category in the insurance variable.
+
+```{r}
+#visualizing self_report_health and insurance
+ggplot(prop_df2, aes(x = insurance, y = proportion, fill = self_report_health_i)) + geom_bar(
+    stat = "identity",aes(y = proportion * 0.98),fill = "black",alpha = 0.25,width = 0.75) + 
+  geom_bar(stat = "identity", width = 0.7,color = "white",linewidth = 0.6) + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),expand = expansion(mult = c(0, 0.15))) + 
+    scale_fill_manual(values = c("steelblue", "grey")) +
+  labs(title = "Proportion of Self-Reported Health by Insurance Coverage", x = "Insurance Coverage", y = "Proportion",fill = "Self-Reported Health") +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(size = 14, face = "bold", hjust = 0),axis.title = element_text(face = "bold"), axis.text.x = element_text(angle = 45, hjust = 1),legend.title = element_text(face = "bold"),panel.grid.major.x = element_blank(),panel.grid.minor = element_blank())
+```
+
+To graph insurance coverage status alongside self-reported health, we are using a stacked bar chart where each insurance group is displayed as a full-height bar, allowing comparison of the within-group proportions of health outcomes. In both bars, the gray segment representing good to excellent health makes up the majority, but the blue segment corresponding to poor to fair health is visibly taller among individuals without insurance coverage. This difference in segment height indicates that a higher proportion of uninsured respondents perceive their health as poor to fair compared to those with coverage, supporting the observed association between insurance coverage and better self-reported health.
+
+- Analysis: Taken together, this visual difference suggests that insurance coverage is not merely descriptive but can play a key role in shaping perceived health, and makes itself a central explanatory variable in subsequent analyses.
+
+#### Distribution of Private Insurance Coverage Status
+```{r}
+#get proportions of priv_insurance variable
+private_insurance_prop <- prop.table(table(health_data_new5$priv_insurance))
+private_insurance_df <- as.data.frame(private_insurance_prop)
+colnames(private_insurance_df) <- c("Categories", "Proportions")
+```
+
+The proportions of each category in the private_insurance variable are being calculated.
+
+```{r}
+#plot priv_insurance
+ggplot(private_insurance_df, aes(x = 2, y = Proportions, fill = Categories)) + 
+  geom_col(width = 1,color = NA,alpha = 0.35,position = position_stack(), aes(x = 2.08)) +
+geom_col(width = 0.7,color = "white",linewidth = 0.6,show.legend = TRUE) +
+    scale_fill_manual(values = c("steelblue", "grey")) +
+  coord_polar(theta = "y") +
+  xlim(0.6, 2.6) +
+  geom_text(aes(label = paste0(round(Proportions * 100, 1), "%")),position = position_stack(vjust = 0.5),color = "white",size = 5,fontface = "bold") +
+  labs(title = "Private Insurance Coverage Distribution",fill = "Private Insurance Coverage") +
+  theme_void(base_size = 14) +
+  theme(plot.title = element_text(size = 14, face = "bold", hjust = 0),
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 12))
+```
+
+We are using a pie chart to better understand who is covered by a private (commercial) insurance plan, where each circular segment represents a coverage category and the size of the segment reflects the proportion of respondents in that group. The large light-gray segment occupies most of the chart, indicating that around 76% of participants are privately insured, while the smaller blue segment, representing approximately 24%, corresponds to individuals who are either uninsured or publicly insured through programs such as Medicare or Medicaid. The contrast in segment size visually emphasizes that private insurance coverage is far more common than non-private coverage in this sample.
+
+#### Self-Reported Health by Private Insurance Coverage Status
+```{r}
+#get proportions of self_report_health categories with priv_insurance categories
+prop_df3 <- health_data_new5 %>%
+  group_by(priv_insurance, self_report_health_i) %>%  # count each combination
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(priv_insurance) %>%                        # calculate proportion within medical_care
+  mutate(proportion = count / sum(count))
+```
+
+Between self_report_health and priv_insurance, two way proportions can also be calculated for this pair of categorical variables. Are the proportions of individuals with poor to fair health and good to excellent health the same for both categories in the priv_insurance variable?
+
+```{r}
+#visualizing self_report_health and priv_insurance
+ggplot(prop_df3, aes(x = priv_insurance, y = proportion, fill = self_report_health_i)) + 
+  geom_bar(stat = "identity",aes(y = proportion * 0.98),fill = "black",alpha = 0.25,width = 0.75) +
+  geom_bar(stat = "identity",width = 0.7,color = "white",
+    linewidth = 0.6) + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),expand = expansion(mult = c(0, 0.15))) +
+    scale_fill_manual(values = c("steelblue", "grey")) +
+  labs(title = "Proportion of Self-Reported Health by Private Insurance Coverage", x = "Private Insurance Coverage",y = "Proportion",fill = "Self-Reported Health") +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(size = 14, face = "bold", hjust = 0),
+    axis.title = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.title = element_text(face = "bold"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank())
+```
+
+In order to assess the relationship between private insurance coverage and self-reported health, we are plotting a stacked bar chart in which each bar represents a private insurance group scaled to 100%, and the colored segments within each bar show the proportion reporting each health category. While the gray segments (good to excellent health) dominate both bars, the blue segment representing poor to fair health is visibly taller among individuals who are not privately insured. This difference in segment height indicates that people without private insurance tend to report worse self-reported health on average than those with private coverage.
+
+- Analysis: Because private insurance status can reflect employment stability and income, this pattern suggests that insurance type may act as a predictor for broader socioeconomic conditions, which we account for explicitly in later modeling.
+
+#### Distribution of Education Level
+```{r}
+#get proportions of edulevel variable
+edu_levels_prop <- prop.table(table(health_data_new5$edulevel))
+edulevel_df <- as.data.frame(edu_levels_prop)
+colnames(edulevel_df) <- c("Categories", "Proportions")
+```
+
+The proportions of each category in education level are also determined.
+
+```{r}
+#plot edulevel
+ggplot(edulevel_df, aes(x = Categories, y = Proportions, fill = Categories)) +
+  geom_bar(stat = "identity", aes(y = Proportions * 0.98),fill = "black",alpha = 0.25,width = 0.75) +
+geom_bar(stat = "identity",width = 0.7,color = "white",linewidth = 0.6) +
+  geom_text(aes(label = paste0(round(Proportions * 100, 1), "%")),hjust = -0.1,color = "white",size = 5,fontface = "bold") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),expand = expansion(mult = c(0, 0.15))) +
+  scale_fill_manual(values = c("steelblue", "grey")) +
+  coord_flip() +
+  labs(title = "Education Level Proportions",x = "Education Level",y = "Proportion",fill = "Education Level") +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(size = 14, face = "bold", hjust = 0),
+    axis.title = element_text(face = "bold"),
+    axis.text.y = element_text(size = 12),
+    axis.text.x = element_text(size = 12),
+    legend.title = element_text(face = "bold"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank())
+```
+
+Through this horizontal bar chart, we are seeing education level proportions by displaying education categories on the y-axis and their corresponding proportions on the x-axis, where longer bars indicate larger shares of respondents. The bar for individuals who did graduate high school extends across most of the scale, while the bar for those who did not graduate high school is comparatively short. This clear difference in bar length shows that the highest proportion of respondents graduated high school, while only a small share did not, providing important context for later comparisons between education level and health outcomes.
+
+- Analysis: The strong imbalance in group sizes highlights the importance of interpreting later education-health comparisons in terms of proportions rather than raw counts.
+
+#### Self-Reported Health by Education Level
+```{r}
+#get proportions of edulevel categories with self_report_health categories
+prop_df4 <- health_data_new5 %>%
+  group_by(edulevel, self_report_health_i) %>%  # count each combination
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(edulevel) %>%                        # calculate proportion within medical_care
+  mutate(proportion = count / sum(count))
+```
+
+Edulevel and self_report_health is another pair of categorical variables where two way proportions can be calculated. We wonder if graduating highschool changes the proportion of individuals reporting poor to fair health or good to excellent health.
+
+```{r}
+#visualizing self_report_health and edulevel
+ggplot(prop_df4, aes(x = edulevel, y = proportion, fill = self_report_health_i)) +
+  geom_col(aes(y = proportion * 0.98),width = 0.75,fill = "black",alpha = 0.25) +
+geom_col(width = 0.7,color = "white",linewidth = 0.6) +
+  scale_fill_manual(values = c("steelblue", "gray")) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),expand = expansion(mult = c(0, 0.15))) +
+  labs(title = "Self-Reported Health by Education Level",x = "Education Level",y = "Proportion",fill = "Self-Reported Health") +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(size = 14, face = "bold", hjust = 0),
+    axis.title = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 30, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.title = element_text(face = "bold"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank())
+```
+
+To get an idea of how education level is correlated with self-reported health, we are plotting a stacked bar chart where each education category is represented as a full bar, and the internal segments show the proportion of respondents reporting poor to fair versus good to excellent health. The gray segments increase in size from the “did not graduate high school” group to the “did graduate high school” group, indicating a higher proportion of positive health reports among individuals with higher educational attainment (here, graduating high school). This visual trend supports the conclusion that, as education level increases, the proportion of people reporting good to excellent health also increases. Even so, both bars remain mostly gray, showing that good/excellent health is still the most common response in both groups, but the gap is visible in the blue segment size. 
+
+- Analysis: The consistent increase in the share of respondents reporting good to excellent health as education level rises suggests a gradient relationship rather than a binary effect, making education’s inclusion as a key predictor in later models.
+
+#### Distribution of Hours Worked per Week
+```{r}
+#plot hoursworked
+ggplot(health_data_new5, aes(x = hoursworked, fill = hoursworked)) +
+  geom_histogram(aes(y = ..count.. * 0.98),bins = 30,fill = "black",alpha = 0.25,color = NA) +
+geom_histogram(bins = 30,color = "white",linewidth = 0.6,fill = "steelblue") +
+labs(title = "Distribution of Number of Hours People Work",x = "Hours Worked",y = "Frequency") +
+theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(size = 14, face = "bold", hjust = 0),
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(size = 12),
+    legend.position = "none",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank())
+```
+
+To understand how many hours individuals work each week, we are creating a histogram in which the x-axis represents hours worked and the height of each bar reflects the frequency of respondents within each hour range. The tallest bars cluster around 40 hours per week, indicating a strong concentration of respondents working full-time schedules. Frequencies taper off at both lower and higher hour ranges, suggesting that fewer respondents work part-time or extended overtime hours. This shape of the distribution visually supports the conclusion that the sample largely consists of individuals with stable, nine-to-five work schedules.
+
+- Analysis: This concentration around full-time work hours establishes a meaningful reference point, making very low or very high working hours particularly relevant when considering health differences. 
+
+#### Self-Reported Health by Hours Worked per Week
+```{r}
+#visualizing self_report_health and hoursworked
+ggplot(health_data_new5, aes(x = self_report_health_i, y = hoursworked, fill = self_report_health_i)) +
+geom_boxplot(aes(y = hoursworked * 0.98),width = 0.7,fill = "black",alpha = 0.25,color = NA) +
+  geom_boxplot(width = 0.7,color = "steelblue",linewidth = 0.6,outlier.shape = 21,outlier.fill = "white") +
+  labs(title = "Self-Reported Health based on the Number of Hours Worked", x = "Self-Reported Health",y = "Hours Worked",fill = "Self-Reported Health Category") +
+  scale_fill_manual(values = c("steelblue", "grey")) +
+theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(size = 14, face = "bold", hjust = 0),
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(face = "bold"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank())
+```
+
+Next, we examine the relationship between hours worked per week and self-reported health using a box plot, where each box summarizes the distribution of hours worked for a health category. The median is shown by the horizontal line inside each box, the box itself represents the interquartile range, and the points beyond the whiskers indicate outliers. Respondents reporting good to excellent health have a slightly higher median (centered around 40 hours per week) compared to those reporting poor to fair health, whose median is lower. Although both groups display wide variability and numerous outliers, this shift in median suggests that individuals able to maintain regular or full-time work schedules are more likely to perceive their health positively.
+
+- Analysis: Although the overlap between groups indicates substantial variability, the upward shift in the median for the good-health group suggests that hours worked may have a modest but structured association with health, creating a need for formal statistical testing in subsequent analyses. 
+
+### Testing for Signifigance
+
+After running basic visualizations, we are curious to see whether our explanatory variables are statistically significant to our model. This will help us fully explore the relationship between socioeconomic factors and self-reported health. In order to do so, we are fitting our response and explanatory variables into a binary logistic regression model. From the overall and individual p-values, we can statistically determine which socioeconomic factors are actually pertinent to our model.
+
+```{r}
+#fit full logistic regression model with all the predictors
+glm.full<-glm(self_report_health~insurance+priv_insurance+medical_care+edulevel+hoursworked, data = health_data_new5, family = binomial)
+#summary(glm.full)
+#null deviance: 28492, df = 49305
+#residual deviance: 27229, df = 49300
+
+#obtain p-value
+pchisq(28492-27729, 49305-49300, lower.tail = F) #at least one explanatory variable is significant to this model
+```
+
+In order to answer our main question, “Which of these explanatory variables matter when predicting one’s self-reported health?”, we used a logistic regression model, which is used to test whether different predictors (like having private insurance or a college degree) make a statistically significant difference in the likelihood of an individual reporting ‘good to excellent health’. The term “statistically significant” does not only indicate importance, but also suggests whether the patterns demonstrated by the different variables are unlikely to have occurred by chance. Therefore, this output illustrates which variables show meaningful relationships with our binary outcome, self-reported health. 
+
+We can perform an overall F test to determine if the model is a good fit. In statistics, an overall F test is utilized to determine whether our model as a whole is significant. The null hypothesis states that all the explanatory variables are insignificant, and the alternative hypothesis states that at least one of the explanatory variables are significant to the model. The last line of code in the code chunk above calculates for the overall p-value of the model, which yields p = 1.17 × 10^-162. This confirms that at least one explanatory variable contributes meaningfully to the respondents' self-reported health status.
+
+### Analysis
+```{r}
+#make table based on summary statistics
+tidy(glm.full) %>% 
+  mutate(Estimate  = round(estimate, 3),`Std. Error` = round(std.error, 3),`z value`  = round(statistic, 3),`p value`  = p.value) %>%
+  select(term, Estimate, `Std. Error`, `z value`, `p value`) %>%
+  kable(format = "html",caption = "Logistic Regression Coefficient Estimates",col.names = c("Variable", "Estimate", "Std. Error", "z value", "p value")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),full_width = FALSE)
+```
+
+Each of the explanatory variables (each row) show a coefficient (“Estimate”) and a p-value (“Pr(>|z|)”). The coefficient value represents both the direction and strength of the relationship, and the p-value tells us whether the effect of this variable is significant to the outcome. Each explanatory variable has its own individual hypothesis test. The hypothesis test entails a null and alternative hypothesis: the null states that each the coefficient is not significant in the model while the alternative states that the coefficient is significant to the model.
+
+- Insurance Coverage: Both no insurance and private insurance have a low p-value, indicating that there is a meaningful relationship between insurance and self-reported health. People without coverage still show a small, positive coefficient; however, those with private insurance have a much larger and highly significant positive effect on their health. This suggests that having private coverage is related to better self-reported health.
+
+- Medical Care Access: Individuals who reported to have at least one place are deemed to be significant predictors to the health outcome. However, a negative relationship is shown relative to the reference group (“no place for medical care access”). The coefficients for this category is relative to the reference group, which is the “no place” category. Therefore, these negative coefficients indicate that people who do have a regular place for care have lower predicted odds of reporting “good/excellent” health compared to people who do not. This can be a counter intuitive pattern due to reverse causality: people who feel unwell are more likely to maintain or seek care sites.
+
+- Education Level: The education variable shows a clear upward trend. The positive coefficient values increase in alignment with the level of education, emphasizing the positive relationship between educational achievement and perceived well-being. Individuals who did graudate highschool have higher odds of reporting "good/excellent" health comapred to individuals who did not graduate highschool. 
+
+- Hours worked: Working more hours per week slightly increases the odds of reporting good health. The effect is small but significant, implying that employment may be a marker of well-being.
+
+### Conclusion and Discussion
+
+Overall, we found that general insurance coverage status, type of insurance coverage (private vs. public), access to medical care (having a usual place to go for care), and number of hours worked per week were all significant in predicting self-reported health. Further, education level was a significant predictor of self-reported health at all levels from high school graduate through doctoral degree. However, the direction of the association between several of our explanatory variables and self-reported health were surprising. 
+
+We expected to see the positive relationship between having private health insurance and self-reported health, as private insurance plans often provide more generous coverage. We also anticipated that higher levels of education would be associated with progressively stronger positive effects on self-reported health. However, we were surprised to see that not having any insurance coverage was associated with better self-reported health, while having at least one usual place for medical care was associated with lower levels of health. Additionally, hours worked per week was positively correlated with self-reported health.
+
+We suspect that these unexpected findings may be due to self-reported health being shaped by intersecting socioeconomic conditions rather than any single factor alone. While the analyses presented here are descriptive, they provide clear motivation for the next phase of the project: modeling self-reported health as a function of these predictors simultaneously.   
+
+In subsequent analyses, regression-based approaches will allow us to assess whether the observed relationships persist after accounting for the interactions among socioeconomic variables and to quantify the relative contributions of these socioeconomic and access variables to health outcomes. In this way, the exploratory findings in this notebook serve as a foundation for a more inferential analysis that follows. Through these analyses, we aim to better understand how socioeconomic factors influence self-reported health and how these findings can inform policies that expand access to quality care.
+
+### Citation
+
+Lynn A. Blewett, Julia A. Rivera Drew, Andrew Fenelon, Miriam L. King, Kari C.W. Williams, Daniel Backman, Etienne Breton, Grace Cooper, and Stephanie Richards. IPUMS Health Surveys: National Health Interview Survey, Version 8.1 [dataset]. Minneapolis, MN: IPUMS, 2025.
+
+
+
+
+
+
+
+
+
